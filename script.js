@@ -1,3 +1,4 @@
+```javascript
 const CATEGORIES = [
     "Fresh",
     "RFL",
@@ -43,24 +44,42 @@ function initApp() {
 // ======================================================
 
 function setTodayDate() {
+
     const dateInput =
-        document.getElementById("report-date");
+        document.getElementById(
+            "report-date"
+        );
 
     if (!dateInput) return;
 
+
     if (!dateInput.value) {
-        const today = new Date();
+
+        const today =
+            new Date();
+
 
         const year =
             today.getFullYear();
 
+
         const month =
-            String(today.getMonth() + 1)
-                .padStart(2, "0");
+            String(
+                today.getMonth() + 1
+            ).padStart(
+                2,
+                "0"
+            );
+
 
         const day =
-            String(today.getDate())
-                .padStart(2, "0");
+            String(
+                today.getDate()
+            ).padStart(
+                2,
+                "0"
+            );
+
 
         dateInput.value =
             `${year}-${month}-${day}`;
@@ -73,26 +92,40 @@ function setTodayDate() {
 // ======================================================
 
 function getStorageKey(dateStr) {
+
     return `sales_report_${dateStr}`;
 }
 
 
 function saveCurrentState() {
 
-    if (AppState.reportView !== "daily") {
+    if (
+        AppState.reportView !==
+        "daily"
+    ) {
         return;
     }
 
+
     const date =
-        document.getElementById("report-date")?.value;
+        document.getElementById(
+            "report-date"
+        )?.value;
+
 
     if (!date) return;
+
 
     try {
 
         localStorage.setItem(
+
             getStorageKey(date),
-            JSON.stringify(AppState.store)
+
+            JSON.stringify(
+                AppState.store
+            )
+
         );
 
     } catch (error) {
@@ -101,6 +134,7 @@ function saveCurrentState() {
             "Could not save report data:",
             error
         );
+
 
         alert(
             "Report data could not be saved. Please check browser storage."
@@ -115,15 +149,24 @@ function saveCurrentState() {
 
 function recordHistory() {
 
-    if (AppState.reportView !== "daily") {
+    if (
+        AppState.reportView !==
+        "daily"
+    ) {
         return;
     }
 
+
     AppState.historyStack.push(
+
         JSON.parse(
-            JSON.stringify(AppState.store)
+            JSON.stringify(
+                AppState.store
+            )
         )
+
     );
+
 
     if (
         AppState.historyStack.length >
@@ -132,6 +175,7 @@ function recordHistory() {
 
         AppState.historyStack.shift();
     }
+
 
     updateActionControlsState();
 }
@@ -148,24 +192,32 @@ function resetHistory() {
 function undo() {
 
     if (
-        AppState.reportView !== "daily" ||
+        AppState.reportView !==
+        "daily" ||
         AppState.historyStack.length === 0
     ) {
         return;
     }
 
+
     AppState.store =
         AppState.historyStack.pop();
 
+
     editHistoryKeys.clear();
+
 
     saveCurrentState();
 
+
     renderTableRows();
+
 
     calculateMetrics();
 
+
     updatePrintHeaderInfo();
+
 
     updateActionControlsState();
 }
@@ -179,10 +231,13 @@ function loadTheme() {
 
     let savedTheme = null;
 
+
     try {
 
         savedTheme =
-            localStorage.getItem("theme");
+            localStorage.getItem(
+                "theme"
+            );
 
     } catch (error) {
 
@@ -192,9 +247,13 @@ function loadTheme() {
         );
     }
 
+
     document.body.classList.toggle(
+
         "dark-mode",
+
         savedTheme !== "light"
+
     );
 }
 
@@ -205,16 +264,23 @@ function toggleTheme() {
         "dark-mode"
     );
 
+
     const isDark =
         document.body.classList.contains(
             "dark-mode"
         );
 
+
     try {
 
         localStorage.setItem(
+
             "theme",
-            isDark ? "dark" : "light"
+
+            isDark
+                ? "dark"
+                : "light"
+
         );
 
     } catch (error) {
@@ -238,23 +304,36 @@ function renderCategoryDropdown() {
             "category-select"
         );
 
+
     if (!select) return;
+
 
     select.innerHTML = "";
 
-    CATEGORIES.forEach(category => {
 
-        const option =
-            document.createElement(
-                "option"
+    CATEGORIES.forEach(
+        category => {
+
+            const option =
+                document.createElement(
+                    "option"
+                );
+
+
+            option.value =
+                category;
+
+
+            option.textContent =
+                category;
+
+
+            select.appendChild(
+                option
             );
+        }
+    );
 
-        option.value = category;
-
-        option.textContent = category;
-
-        select.appendChild(option);
-    });
 
     select.value =
         AppState.currentCategory;
@@ -272,12 +351,16 @@ function loadReportData() {
             "report-date"
         )?.value;
 
+
     if (!date) return;
+
 
     resetHistory();
 
+
     if (
-        AppState.reportView === "daily"
+        AppState.reportView ===
+        "daily"
     ) {
 
         AppState.store =
@@ -287,17 +370,45 @@ function loadReportData() {
 
     } else {
 
-        AppState.store =
+        /*
+         * Always build a completely fresh
+         * monthly snapshot from LocalStorage.
+         *
+         * This prevents old/stale AppState data
+         * from being used when switching to
+         * Monthly Summary.
+         */
+
+        const monthlyStore =
             aggregateMonthlyData(
                 date
             );
+
+
+        AppState.store =
+            monthlyStore;
     }
+
+
+    /*
+     * IMPORTANT ORDER
+     *
+     * 1. Build correct store
+     * 2. Render table
+     * 3. Calculate metrics from SAME store
+     *
+     * This guarantees that Monthly Summary
+     * metrics and table use the same data.
+     */
 
     renderTableRows();
 
+
     calculateMetrics();
 
+
     updatePrintHeaderInfo();
+
 
     updateActionControlsState();
 }
@@ -307,19 +418,25 @@ function loadReportData() {
 // GET / INITIALIZE CATEGORY DATA
 // ======================================================
 
-function getOrInitializeCategoryData(date) {
+function getOrInitializeCategoryData(
+    date
+) {
 
     const key =
         getStorageKey(date);
 
+
     let storedData = {};
+
 
     try {
 
         const saved =
             localStorage.getItem(key);
 
+
         if (saved) {
+
             storedData =
                 JSON.parse(saved);
         }
@@ -330,6 +447,7 @@ function getOrInitializeCategoryData(date) {
             "Invalid localStorage data:",
             error
         );
+
 
         storedData = {};
     }
@@ -374,6 +492,7 @@ function getOrInitializeCategoryData(date) {
         const storageKey =
             localStorage.key(i);
 
+
         if (
             storageKey &&
             storageKey.startsWith(
@@ -383,10 +502,12 @@ function getOrInitializeCategoryData(date) {
         ) {
 
             previousDates.push(
+
                 storageKey.replace(
                     "sales_report_",
                     ""
                 )
+
             );
         }
     }
@@ -404,11 +525,13 @@ function getOrInitializeCategoryData(date) {
 
             const previousData =
                 JSON.parse(
+
                     localStorage.getItem(
                         getStorageKey(
                             previousDate
                         )
                     )
+
                 );
 
 
@@ -419,7 +542,9 @@ function getOrInitializeCategoryData(date) {
 
 
             if (
-                Array.isArray(categoryData) &&
+                Array.isArray(
+                    categoryData
+                ) &&
                 categoryData.some(
                     item =>
                         item &&
@@ -430,39 +555,51 @@ function getOrInitializeCategoryData(date) {
 
                 const copiedProducts =
                     categoryData
+
                         .filter(
                             item =>
                                 item &&
                                 typeof item.name === "string" &&
                                 item.name.trim()
                         )
-                        .map(item => ({
-                            name:
-                                item.name.trim(),
 
-                            outQty: 0,
+                        .map(
+                            item => ({
 
-                            returnQty: 0,
+                                name:
+                                    item.name.trim(),
 
-                            basePrice:
-                                Math.max(
-                                    0,
-                                    Number(
-                                        item.basePrice
-                                    ) || 0
-                                ),
+                                outQty: 0,
 
-                            sellPrice:
-                                Math.max(
-                                    0,
-                                    Number(
-                                        item.sellPrice
-                                    ) || 0
-                                )
-                        }));
+                                returnQty: 0,
+
+                                basePrice:
+                                    Math.max(
+
+                                        0,
+
+                                        Number(
+                                            item.basePrice
+                                        ) || 0
+
+                                    ),
+
+                                sellPrice:
+                                    Math.max(
+
+                                        0,
+
+                                        Number(
+                                            item.sellPrice
+                                        ) || 0
+
+                                    )
+                            })
+                        );
 
 
                 const newStore = {
+
                     ...storedData,
 
                     [AppState.currentCategory]:
@@ -473,10 +610,13 @@ function getOrInitializeCategoryData(date) {
                 try {
 
                     localStorage.setItem(
+
                         key,
+
                         JSON.stringify(
                             newStore
                         )
+
                     );
 
                 } catch (error) {
@@ -496,8 +636,11 @@ function getOrInitializeCategoryData(date) {
         } catch (error) {
 
             console.warn(
+
                 `Could not read previous report: ${previousDate}`,
+
                 error
+
             );
         }
     }
@@ -518,70 +661,91 @@ function normalizeStore(store) {
     const normalized = {};
 
 
-    CATEGORIES.forEach(category => {
+    CATEGORIES.forEach(
+        category => {
 
-        const rows =
-            Array.isArray(
-                store?.[category]
-            )
-                ? store[category]
-                : [];
-
-
-        normalized[category] =
-            rows.map(row => {
-
-                const outQty =
-                    Math.max(
-                        0,
-                        Number(
-                            row?.outQty
-                        ) || 0
-                    );
+            const rows =
+                Array.isArray(
+                    store?.[category]
+                )
+                    ? store[category]
+                    : [];
 
 
-                const returnQty =
-                    Math.min(
-                        outQty,
+            normalized[category] =
+                rows.map(
+                    row => {
 
-                        Math.max(
-                            0,
-                            Number(
-                                row?.returnQty
-                            ) || 0
-                        )
-                    );
+                        const outQty =
+                            Math.max(
+
+                                0,
+
+                                Number(
+                                    row?.outQty
+                                ) || 0
+
+                            );
 
 
-                return {
+                        const returnQty =
+                            Math.min(
 
-                    name:
-                        typeof row?.name === "string"
-                            ? row.name
-                            : "",
+                                outQty,
 
-                    outQty,
+                                Math.max(
 
-                    returnQty,
+                                    0,
 
-                    basePrice:
-                        Math.max(
-                            0,
-                            Number(
-                                row?.basePrice
-                            ) || 0
-                        ),
+                                    Number(
+                                        row?.returnQty
+                                    ) || 0
 
-                    sellPrice:
-                        Math.max(
-                            0,
-                            Number(
-                                row?.sellPrice
-                            ) || 0
-                        )
-                };
-            });
-    });
+                                )
+
+                            );
+
+
+                        return {
+
+                            name:
+                                typeof row?.name ===
+                                "string"
+
+                                    ? row.name
+
+                                    : "",
+
+                            outQty,
+
+                            returnQty,
+
+                            basePrice:
+                                Math.max(
+
+                                    0,
+
+                                    Number(
+                                        row?.basePrice
+                                    ) || 0
+
+                                ),
+
+                            sellPrice:
+                                Math.max(
+
+                                    0,
+
+                                    Number(
+                                        row?.sellPrice
+                                    ) || 0
+
+                                )
+                        };
+                    }
+                );
+        }
+    );
 
 
     return normalized;
@@ -608,16 +772,22 @@ function aggregateMonthlyData(
 
     CATEGORIES.forEach(
         category => {
+
             aggregated[category] = [];
+
         }
     );
 
 
     const daysInMonth =
         new Date(
+
             Number(year),
+
             Number(month),
+
             0
+
         ).getDate();
 
 
@@ -640,9 +810,11 @@ function aggregateMonthlyData(
 
         const saved =
             localStorage.getItem(
+
                 getStorageKey(
                     currentDate
                 )
+
             );
 
 
@@ -655,13 +827,18 @@ function aggregateMonthlyData(
         try {
 
             dailyData =
-                JSON.parse(saved);
+                JSON.parse(
+                    saved
+                );
 
         } catch (error) {
 
             console.warn(
+
                 `Invalid data for ${currentDate}`,
+
                 error
+
             );
 
             continue;
@@ -674,154 +851,174 @@ function aggregateMonthlyData(
                 const rows =
                     dailyData?.[category];
 
-                if (!Array.isArray(rows)) {
+
+                if (
+                    !Array.isArray(rows)
+                ) {
                     return;
                 }
 
 
-                rows.forEach(item => {
+                rows.forEach(
+                    item => {
 
-                    if (
-                        !item ||
-                        typeof item.name !== "string" ||
-                        !item.name.trim()
-                    ) {
-                        return;
-                    }
-
-
-                    const cleanName =
-                        item.name.trim();
+                        if (
+                            !item ||
+                            typeof item.name !== "string" ||
+                            !item.name.trim()
+                        ) {
+                            return;
+                        }
 
 
-                    /*
-                     * IMPORTANT:
-                     *
-                     * Calculate this row using the
-                     * price values from THIS specific day.
-                     *
-                     * This prevents incorrect monthly
-                     * totals when product prices change
-                     * during the month.
-                     */
-
-                    const dailyResult =
-                        calculateRow(item);
-
-
-                    const existingIndex =
-                        aggregated[
-                            category
-                        ].findIndex(
-                            product =>
-                                product.name
-                                    .trim()
-                                    .toLowerCase() ===
-                                cleanName
-                                    .toLowerCase()
-                        );
-
-
-                    if (
-                        existingIndex === -1
-                    ) {
-
-                        aggregated[
-                            category
-                        ].push({
-
-                            name:
-                                cleanName,
-
-                            outQty:
-                                dailyResult.outQty,
-
-                            returnQty:
-                                dailyResult.returnQty,
-
-                            basePrice:
-                                dailyResult.basePrice,
-
-                            sellPrice:
-                                dailyResult.sellPrice,
-
-                            soldQty:
-                                dailyResult.soldQty,
-
-                            totalSales:
-                                dailyResult.totalSales,
-
-                            profit:
-                                dailyResult.profit,
-
-                            /*
-                             * This marker tells calculateRow()
-                             * that this row already contains
-                             * aggregated monthly totals.
-                             */
-                            isMonthlyAggregate:
-                                true
-                        });
-
-                    } else {
-
-                        const existing =
-                            aggregated[
-                                category
-                            ][
-                                existingIndex
-                            ];
-
-
-                        existing.outQty +=
-                            dailyResult.outQty;
-
-
-                        existing.returnQty +=
-                            dailyResult.returnQty;
-
-
-                        existing.soldQty +=
-                            dailyResult.soldQty;
-
-
-                        existing.totalSales +=
-                            dailyResult.totalSales;
-
-
-                        existing.profit +=
-                            dailyResult.profit;
+                        const cleanName =
+                            item.name.trim();
 
 
                         /*
-                         * Keep the latest day's prices
-                         * for display, preserving the
-                         * previous UI behavior.
+                         * VERY IMPORTANT
                          *
-                         * These prices are NOT used to
-                         * recalculate monthly totals.
+                         * Calculate each day's row
+                         * using THAT DAY'S prices.
+                         *
+                         * Example:
+                         *
+                         * Day 1:
+                         * 10 × ৳100 = ৳1000
+                         *
+                         * Day 2:
+                         * 10 × ৳110 = ৳1100
+                         *
+                         * Monthly:
+                         * ৳1000 + ৳1100 = ৳2100
+                         *
+                         * NOT:
+                         * 20 × ৳110 = ৳2200
                          */
-                        existing.basePrice =
-                            dailyResult.basePrice;
+
+                        const dailyResult =
+                            calculateRow(
+                                item
+                            );
 
 
-                        existing.sellPrice =
-                            dailyResult.sellPrice;
+                        const existingIndex =
+                            aggregated[
+                                category
+                            ].findIndex(
+
+                                product =>
+
+                                    product.name
+                                        .trim()
+                                        .toLowerCase() ===
+                                    cleanName
+                                        .toLowerCase()
+
+                            );
+
+
+                        if (
+                            existingIndex === -1
+                        ) {
+
+                            aggregated[
+                                category
+                            ].push({
+
+                                name:
+                                    cleanName,
+
+                                outQty:
+                                    dailyResult.outQty,
+
+                                returnQty:
+                                    dailyResult.returnQty,
+
+                                basePrice:
+                                    dailyResult.basePrice,
+
+                                sellPrice:
+                                    dailyResult.sellPrice,
+
+                                soldQty:
+                                    dailyResult.soldQty,
+
+                                totalSales:
+                                    dailyResult.totalSales,
+
+                                profit:
+                                    dailyResult.profit,
+
+                                isMonthlyAggregate:
+                                    true
+                            });
+
+                        } else {
+
+                            const existing =
+                                aggregated[
+                                    category
+                                ][
+                                    existingIndex
+                                ];
+
+
+                            existing.outQty +=
+                                dailyResult.outQty;
+
+
+                            existing.returnQty +=
+                                dailyResult.returnQty;
+
+
+                            existing.soldQty +=
+                                dailyResult.soldQty;
+
+
+                            existing.totalSales +=
+                                dailyResult.totalSales;
+
+
+                            existing.profit +=
+                                dailyResult.profit;
+
+
+                            /*
+                             * Latest day's price is
+                             * displayed only.
+                             *
+                             * It is NOT used to
+                             * recalculate monthly totals.
+                             */
+
+                            existing.basePrice =
+                                dailyResult.basePrice;
+
+
+                            existing.sellPrice =
+                                dailyResult.sellPrice;
+                        }
                     }
-                });
-
+                );
             }
         );
     }
 
 
     /*
-     * Do NOT call normalizeStore() here.
+     * DO NOT normalize monthly data.
      *
-     * normalizeStore() intentionally keeps only
-     * the normal daily-report fields and would remove
-     * the monthly aggregate totals.
+     * normalizeStore() would remove:
+     *
+     * soldQty
+     * totalSales
+     * profit
+     * isMonthlyAggregate
+     *
+     * which are required for the monthly report.
      */
+
     return aggregated;
 }
 
@@ -835,42 +1032,26 @@ function calculateRow(row) {
     /*
      * MONTHLY AGGREGATE
      *
-     * Monthly rows already contain the correctly
-     * calculated totals from each individual day.
+     * These values have already been calculated
+     * day-by-day by aggregateMonthlyData().
      *
-     * Therefore we must NOT calculate:
-     *
-     *   totalSales = monthlySoldQty × latestSellPrice
-     *
-     * or:
-     *
-     *   profit = monthlySoldQty ×
-     *            (latestSellPrice - latestBasePrice)
-     *
-     * because prices may have changed during the month.
+     * Therefore we must return the stored values.
      */
 
     if (
         row?.isMonthlyAggregate === true
     ) {
 
-        const rawOutQty =
-            Number(row?.outQty);
-
-
         const outQty =
-            Number.isFinite(
-                rawOutQty
-            )
-                ? Math.max(
-                    0,
-                    rawOutQty
-                )
-                : 0;
+            Math.max(
 
+                0,
 
-        const rawReturnQty =
-            Number(row?.returnQty);
+                Number(
+                    row.outQty
+                ) || 0
+
+            );
 
 
         const returnQty =
@@ -878,58 +1059,56 @@ function calculateRow(row) {
 
                 outQty,
 
-                Number.isFinite(
-                    rawReturnQty
+                Math.max(
+
+                    0,
+
+                    Number(
+                        row.returnQty
+                    ) || 0
+
                 )
-                    ? Math.max(
-                        0,
-                        rawReturnQty
-                    )
-                    : 0
+
             );
 
 
-        const rawBasePrice =
-            Number(row?.basePrice);
-
-
         const basePrice =
-            Number.isFinite(
-                rawBasePrice
-            )
-                ? Math.max(
-                    0,
-                    rawBasePrice
-                )
-                : 0;
+            Math.max(
 
+                0,
 
-        const rawSellPrice =
-            Number(row?.sellPrice);
+                Number(
+                    row.basePrice
+                ) || 0
+
+            );
 
 
         const sellPrice =
-            Number.isFinite(
-                rawSellPrice
-            )
-                ? Math.max(
-                    0,
-                    rawSellPrice
-                )
-                : 0;
+            Math.max(
+
+                0,
+
+                Number(
+                    row.sellPrice
+                ) || 0
+
+            );
 
 
-        const rawSoldQty =
-            Number(row?.soldQty);
+        const storedSoldQty =
+            Number(
+                row.soldQty
+            );
 
 
         const soldQty =
             Number.isFinite(
-                rawSoldQty
+                storedSoldQty
             )
                 ? Math.max(
                     0,
-                    rawSoldQty
+                    storedSoldQty
                 )
                 : Math.max(
                     0,
@@ -937,30 +1116,34 @@ function calculateRow(row) {
                 );
 
 
-        const rawTotalSales =
-            Number(row?.totalSales);
+        const storedTotalSales =
+            Number(
+                row.totalSales
+            );
 
 
         const totalSales =
             Number.isFinite(
-                rawTotalSales
+                storedTotalSales
             )
                 ? Math.max(
                     0,
-                    rawTotalSales
+                    storedTotalSales
                 )
                 : 0;
 
 
-        const rawProfit =
-            Number(row?.profit);
+        const storedProfit =
+            Number(
+                row.profit
+            );
 
 
         const profit =
             Number.isFinite(
-                rawProfit
+                storedProfit
             )
-                ? rawProfit
+                ? storedProfit
                 : 0;
 
 
@@ -984,13 +1167,15 @@ function calculateRow(row) {
 
 
     /*
-     * DAILY CALCULATION
+     * DAILY REPORT CALCULATION
      *
-     * Existing Daily Report logic remains unchanged.
+     * Existing logic remains unchanged.
      */
 
     const rawOutQty =
-        Number(row?.outQty);
+        Number(
+            row?.outQty
+        );
 
 
     const outQty =
@@ -1005,7 +1190,9 @@ function calculateRow(row) {
 
 
     const rawReturnQty =
-        Number(row?.returnQty);
+        Number(
+            row?.returnQty
+        );
 
 
     const returnQty =
@@ -1021,11 +1208,14 @@ function calculateRow(row) {
                     rawReturnQty
                 )
                 : 0
+
         );
 
 
     const rawBasePrice =
-        Number(row?.basePrice);
+        Number(
+            row?.basePrice
+        );
 
 
     const basePrice =
@@ -1040,7 +1230,9 @@ function calculateRow(row) {
 
 
     const rawSellPrice =
-        Number(row?.sellPrice);
+        Number(
+            row?.sellPrice
+        );
 
 
     const sellPrice =
@@ -1055,11 +1247,13 @@ function calculateRow(row) {
 
 
     const soldQty =
-        outQty - returnQty;
+        outQty -
+        returnQty;
 
 
     const totalSales =
-        soldQty * sellPrice;
+        soldQty *
+        sellPrice;
 
 
     const profit =
@@ -1107,11 +1301,13 @@ function formatNumber(value) {
 
 
     return number.toLocaleString(
+
         "en-US",
+
         {
-            maximumFractionDigits:
-                2
+            maximumFractionDigits: 2
         }
+
     );
 }
 
@@ -1130,14 +1326,17 @@ function formatCurrency(value) {
 
 
     return `৳${number.toLocaleString(
-        "en-US",
-        {
-            minimumFractionDigits:
-                2,
 
-            maximumFractionDigits:
-                2
+        "en-US",
+
+        {
+
+            minimumFractionDigits: 2,
+
+            maximumFractionDigits: 2
+
         }
+
     )}`;
 }
 
@@ -1231,6 +1430,7 @@ function renderTableRows() {
                 basePrice: 0,
 
                 sellPrice: 0
+
             });
         }
     }
@@ -1259,9 +1459,11 @@ function renderTableRows() {
 
 
         emptyRow.innerHTML = `
+
             <td colspan="8">
                 No sales data available for this month.
             </td>
+
         `;
 
 
@@ -1278,7 +1480,9 @@ function renderTableRows() {
         (row, index) => {
 
             const result =
-                calculateRow(row);
+                calculateRow(
+                    row
+                );
 
 
             const tr =
@@ -1296,31 +1500,45 @@ function renderTableRows() {
                     </td>
 
                     <td>
-                        ${formatNumber(result.outQty)}
+                        ${formatNumber(
+                            result.outQty
+                        )}
                     </td>
 
                     <td>
-                        ${formatNumber(result.returnQty)}
+                        ${formatNumber(
+                            result.returnQty
+                        )}
                     </td>
 
                     <td class="calculated-cell">
-                        ${formatNumber(result.soldQty)}
+                        ${formatNumber(
+                            result.soldQty
+                        )}
                     </td>
 
                     <td>
-                        ${formatCurrency(result.basePrice)}
+                        ${formatCurrency(
+                            result.basePrice
+                        )}
                     </td>
 
                     <td>
-                        ${formatCurrency(result.sellPrice)}
+                        ${formatCurrency(
+                            result.sellPrice
+                        )}
                     </td>
 
                     <td class="calculated-cell">
-                        ${formatCurrency(result.totalSales)}
+                        ${formatCurrency(
+                            result.totalSales
+                        )}
                     </td>
 
                     <td class="calculated-cell profit-cell">
-                        ${formatCurrency(result.profit)}
+                        ${formatCurrency(
+                            result.profit
+                        )}
                     </td>
 
                 `;
@@ -1334,7 +1552,9 @@ function renderTableRows() {
                         <input
                             type="text"
                             class="product-name-input"
-                            value="${escapeHTML(row.name)}"
+                            value="${escapeHTML(
+                                row.name
+                            )}"
                             placeholder="Product name"
                             data-index="${index}"
                             data-field="name"
@@ -1372,7 +1592,9 @@ function renderTableRows() {
 
 
                     <td class="calculated-cell">
-                        ${formatNumber(result.soldQty)}
+                        ${formatNumber(
+                            result.soldQty
+                        )}
                     </td>
 
 
@@ -1405,12 +1627,16 @@ function renderTableRows() {
 
 
                     <td class="calculated-cell">
-                        ${formatCurrency(result.totalSales)}
+                        ${formatCurrency(
+                            result.totalSales
+                        )}
                     </td>
 
 
                     <td class="calculated-cell profit-cell">
-                        ${formatCurrency(result.profit)}
+                        ${formatCurrency(
+                            result.profit
+                        )}
                     </td>
 
 
@@ -1454,6 +1680,7 @@ function renderTableRows() {
 
     bindTableEvents();
 
+
     updateActionControlsState();
 }
 
@@ -1477,53 +1704,56 @@ function bindTableEvents() {
         .querySelectorAll(
             "input[data-index]"
         )
-        .forEach(input => {
+        .forEach(
+            input => {
 
-            input.addEventListener(
-                "input",
-                onInputChange
-            );
+                input.addEventListener(
+                    "input",
+                    onInputChange
+                );
 
 
-            input.addEventListener(
-                "blur",
-                () => {
+                input.addEventListener(
+                    "blur",
+                    () => {
 
-                    editHistoryKeys.delete(
+                        editHistoryKeys.delete(
 
-                        `${AppState.currentCategory}:` +
-                        `${input.dataset.index}:` +
-                        `${input.dataset.field}`
+                            `${AppState.currentCategory}:` +
+                            `${input.dataset.index}:` +
+                            `${input.dataset.field}`
 
-                    );
+                        );
 
-                }
-            );
-
-        });
+                    }
+                );
+            }
+        );
 
 
     tbody
         .querySelectorAll(
             "[data-delete-index]"
         )
-        .forEach(button => {
+        .forEach(
+            button => {
 
-            button.addEventListener(
-                "click",
-                () => {
+                button.addEventListener(
+                    "click",
+                    () => {
 
-                    openDeleteModal(
-                        Number(
-                            button.dataset
-                                .deleteIndex
-                        )
-                    );
+                        openDeleteModal(
 
-                }
-            );
+                            Number(
+                                button.dataset
+                                    .deleteIndex
+                            )
 
-        });
+                        );
+                    }
+                );
+            }
+        );
 }
 
 
@@ -1588,6 +1818,7 @@ function onInputChange(event) {
 
         recordHistory();
 
+
         editHistoryKeys.add(
             historyKey
         );
@@ -1610,7 +1841,9 @@ function onInputChange(event) {
 
 
         let value =
-            Number.isFinite(parsed)
+            Number.isFinite(
+                parsed
+            )
                 ? Math.max(
                     0,
                     parsed
@@ -1624,14 +1857,19 @@ function onInputChange(event) {
 
             value =
                 Math.min(
+
                     value,
 
                     Math.max(
+
                         0,
+
                         Number(
                             row.outQty
                         ) || 0
+
                     )
+
                 );
         }
 
@@ -1652,18 +1890,25 @@ function onInputChange(event) {
             Math.min(
 
                 Math.max(
+
                     0,
+
                     Number(
                         row.returnQty
                     ) || 0
+
                 ),
 
                 Math.max(
+
                     0,
+
                     Number(
                         row.outQty
                     ) || 0
+
                 )
+
             );
     }
 
@@ -1672,11 +1917,15 @@ function onInputChange(event) {
 
 
     const result =
-        calculateRow(row);
+        calculateRow(
+            row
+        );
 
 
     const tr =
-        input.closest("tr");
+        input.closest(
+            "tr"
+        );
 
 
     if (!tr) return;
@@ -1739,12 +1988,15 @@ function onInputChange(event) {
         !result.returnQty &&
         !result.basePrice &&
         !result.sellPrice
+
     );
 
 
     calculateMetrics();
 
+
     updatePrintHeaderInfo();
+
 
     updateActionControlsState();
 }
@@ -1766,6 +2018,7 @@ function addRow() {
 
     recordHistory();
 
+
     editHistoryKeys.clear();
 
 
@@ -1786,6 +2039,7 @@ function addRow() {
         basePrice: 0,
 
         sellPrice: 0
+
     });
 
 
@@ -1796,7 +2050,9 @@ function addRow() {
 
     saveCurrentState();
 
+
     renderTableRows();
+
 
     calculateMetrics();
 }
@@ -1854,6 +2110,7 @@ function openDeleteModal(index) {
         modal.style.display =
             "flex";
 
+
         modal.classList.add(
             "active"
         );
@@ -1878,6 +2135,7 @@ function closeDeleteModal() {
         modal.classList.remove(
             "active"
         );
+
 
         modal.style.display =
             "none";
@@ -1919,6 +2177,7 @@ function confirmDelete() {
 
     recordHistory();
 
+
     editHistoryKeys.clear();
 
 
@@ -1930,9 +2189,12 @@ function confirmDelete() {
 
     saveCurrentState();
 
+
     renderTableRows();
 
+
     calculateMetrics();
+
 
     closeDeleteModal();
 }
@@ -1963,6 +2225,7 @@ function openClearModal() {
         modal.style.display =
             "flex";
 
+
         modal.classList.add(
             "active"
         );
@@ -1984,6 +2247,7 @@ function closeClearModal() {
             "active"
         );
 
+
         modal.style.display =
             "none";
     }
@@ -2002,6 +2266,7 @@ function confirmClearAll() {
 
     recordHistory();
 
+
     editHistoryKeys.clear();
 
 
@@ -2012,9 +2277,12 @@ function confirmClearAll() {
 
     saveCurrentState();
 
+
     renderTableRows();
 
+
     calculateMetrics();
+
 
     closeClearModal();
 }
@@ -2039,23 +2307,27 @@ function calculateMetrics() {
     let totalProfit = 0;
 
 
-    rows.forEach(row => {
+    rows.forEach(
+        row => {
 
-        const result =
-            calculateRow(row);
-
-
-        totalSellQty +=
-            result.soldQty;
-
-
-        totalSellAmount +=
-            result.totalSales;
+            const result =
+                calculateRow(
+                    row
+                );
 
 
-        totalProfit +=
-            result.profit;
-    });
+            totalSellQty +=
+                result.soldQty;
+
+
+            totalSellAmount +=
+                result.totalSales;
+
+
+            totalProfit +=
+                result.profit;
+        }
+    );
 
 
     const sellQtyElement =
@@ -2141,19 +2413,25 @@ function getFormattedReportDate() {
             date.getTime()
         )
     ) {
+
         return value;
     }
 
 
     return date.toLocaleDateString(
+
         "en-GB",
+
         {
+
             day: "2-digit",
 
             month: "short",
 
             year: "numeric"
+
         }
+
     );
 }
 
@@ -2178,13 +2456,16 @@ function isMeaningfulRow(row) {
 
     const name =
         inputs.find(
+
             input =>
                 input.type === "text"
+
         )?.value?.trim() || "";
 
 
     const hasNumber =
         inputs.some(
+
             input => {
 
                 if (
@@ -2201,12 +2482,16 @@ function isMeaningfulRow(row) {
 
 
                 return (
+
                     Number.isFinite(
                         value
                     ) &&
+
                     value > 0
+
                 );
             }
+
         );
 
 
@@ -2236,14 +2521,18 @@ function createPrintMeta() {
     meta.innerHTML = `
 
         <div class="print-report-title">
+
             ${escapeHTML(
                 getReportTitle()
             )}
+
         </div>
+
 
         <div class="print-report-info">
 
             <span>
+
                 <strong>
                     Category:
                 </strong>
@@ -2251,9 +2540,12 @@ function createPrintMeta() {
                 ${escapeHTML(
                     AppState.currentCategory
                 )}
+
             </span>
 
+
             <span>
+
                 <strong>
                     Date:
                 </strong>
@@ -2261,6 +2553,7 @@ function createPrintMeta() {
                 ${escapeHTML(
                     getFormattedReportDate()
                 )}
+
             </span>
 
         </div>
@@ -2319,14 +2612,20 @@ function preparePrint() {
         );
 
 
-    rows.forEach(row => {
+    rows.forEach(
+        row => {
 
-        row.classList.toggle(
-            "print-hidden-row",
-            !isMeaningfulRow(row)
-        );
+            row.classList.toggle(
 
-    });
+                "print-hidden-row",
+
+                !isMeaningfulRow(
+                    row
+                )
+
+            );
+        }
+    );
 }
 
 
@@ -2356,13 +2655,17 @@ function cleanupPrint() {
         .querySelectorAll(
             ".print-hidden-row"
         )
-        .forEach(row => {
+        .forEach(
 
-            row.classList.remove(
-                "print-hidden-row"
-            );
+            row => {
 
-        });
+                row.classList.remove(
+                    "print-hidden-row"
+                );
+
+            }
+
+        );
 }
 
 
@@ -2376,12 +2679,15 @@ function printReport() {
 
 
     window.setTimeout(
+
         () => {
 
             window.print();
 
         },
+
         50
+
     );
 }
 
@@ -2404,7 +2710,9 @@ function buildPDFDocument() {
 
 
     const clone =
-        source.cloneNode(true);
+        source.cloneNode(
+            true
+        );
 
 
     clone.classList.add(
@@ -2416,11 +2724,15 @@ function buildPDFDocument() {
 
     clone
         .querySelectorAll(
+
             ".no-print, .action-bar, button, select, input[type='date']"
+
         )
         .forEach(
+
             element =>
                 element.remove()
+
         );
 
 
@@ -2439,16 +2751,22 @@ function buildPDFDocument() {
         .querySelectorAll(
             "#sales-table-body tr"
         )
-        .forEach(row => {
+        .forEach(
 
-            if (
-                !isMeaningfulRow(row)
-            ) {
+            row => {
 
-                row.remove();
+                if (
+                    !isMeaningfulRow(
+                        row
+                    )
+                ) {
+
+                    row.remove();
+                }
+
             }
 
-        });
+        );
 
 
     // Convert inputs to text.
@@ -2457,27 +2775,31 @@ function buildPDFDocument() {
         .querySelectorAll(
             "input"
         )
-        .forEach(input => {
+        .forEach(
 
-            const span =
-                document.createElement(
-                    "span"
+            input => {
+
+                const span =
+                    document.createElement(
+                        "span"
+                    );
+
+
+                span.className =
+                    "pdf-value";
+
+
+                span.textContent =
+                    input.value || "";
+
+
+                input.replaceWith(
+                    span
                 );
 
+            }
 
-            span.className =
-                "pdf-value";
-
-
-            span.textContent =
-                input.value || "";
-
-
-            input.replaceWith(
-                span
-            );
-
-        });
+        );
 
 
     // Remove original app header.
@@ -2510,13 +2832,18 @@ function buildPDFDocument() {
         <div>
 
             <div class="pdf-report-title">
+
                 ${escapeHTML(
                     getReportTitle()
                 )}
+
             </div>
 
+
             <div class="pdf-report-subtitle">
+
                 Sales Report Management System
+
             </div>
 
         </div>
@@ -2525,6 +2852,7 @@ function buildPDFDocument() {
         <div class="pdf-report-meta">
 
             <div>
+
                 <strong>
                     Category:
                 </strong>
@@ -2532,10 +2860,12 @@ function buildPDFDocument() {
                 ${escapeHTML(
                     AppState.currentCategory
                 )}
+
             </div>
 
 
             <div>
+
                 <strong>
                     Date:
                 </strong>
@@ -2543,6 +2873,7 @@ function buildPDFDocument() {
                 ${escapeHTML(
                     getFormattedReportDate()
                 )}
+
             </div>
 
         </div>
@@ -2643,9 +2974,9 @@ async function generatePDF() {
 
 
     /*
-      A4 Landscape PDF
-      Unit = millimeter
-    */
+     * A4 Landscape PDF
+     * Unit = millimeter
+     */
 
     const options = {
 
@@ -2666,6 +2997,7 @@ async function generatePDF() {
             type: "jpeg",
 
             quality: 0.98
+
         },
 
 
@@ -2683,6 +3015,7 @@ async function generatePDF() {
             scrollX: 0,
 
             scrollY: 0
+
         },
 
 
@@ -2697,22 +3030,22 @@ async function generatePDF() {
                 "tr",
                 ".metric-card"
             ]
+
         },
 
 
         jsPDF: {
 
-            // A4 measurement unit
             unit: "mm",
 
-            // A4 page
             format: "a4",
 
-            // Landscape
             orientation: "landscape",
 
             compress: true
+
         }
+
     };
 
 
@@ -2729,9 +3062,13 @@ async function generatePDF() {
     } catch (error) {
 
         console.error(
+
             "PDF generation failed:",
+
             error
+
         );
+
 
         alert(
             "PDF could not be generated. Please try again."
@@ -2822,9 +3159,12 @@ function updateActionControlsState() {
     if (undoButton) {
 
         undoButton.disabled =
+
             isMonthly ||
+
             AppState.historyStack
                 .length === 0;
+
     }
 
 
@@ -2947,26 +3287,36 @@ function bindGlobalEvents() {
 
 
     categorySelect?.addEventListener(
+
         "change",
+
         event => {
 
             AppState.currentCategory =
                 event.target.value;
 
+
             loadReportData();
+
         }
+
     );
 
 
     reportViewSelect?.addEventListener(
+
         "change",
+
         event => {
 
             AppState.reportView =
                 event.target.value;
 
+
             loadReportData();
+
         }
+
     );
 
 
@@ -3058,37 +3408,47 @@ function bindModalHelpers() {
     [
         deleteModal,
         clearModal
-    ].forEach(modal => {
 
-        if (!modal) return;
+    ].forEach(
+
+        modal => {
+
+            if (!modal) return;
 
 
-        modal.addEventListener(
-            "click",
-            event => {
+            modal.addEventListener(
 
-                if (
-                    event.target !==
-                    modal
-                ) {
-                    return;
+                "click",
+
+                event => {
+
+                    if (
+                        event.target !==
+                        modal
+                    ) {
+                        return;
+                    }
+
+
+                    modal.classList.remove(
+                        "active"
+                    );
+
+
+                    modal.style.display =
+                        "none";
                 }
 
+            );
+        }
 
-                modal.classList.remove(
-                    "active"
-                );
-
-
-                modal.style.display =
-                    "none";
-            }
-        );
-    });
+    );
 
 
     document.addEventListener(
+
         "keydown",
+
         event => {
 
             if (
@@ -3102,7 +3462,9 @@ function bindModalHelpers() {
             closeDeleteModal();
 
             closeClearModal();
+
         }
+
     );
 }
 
@@ -3116,15 +3478,73 @@ document.addEventListener(
     initApp
 );
 
-if ("serviceWorker" in navigator) {
-    window.addEventListener("load", () => {
-        navigator.serviceWorker
-            .register("./sw.js")
-            .then(() => {
-                console.log("Service Worker registered successfully.");
-            })
-            .catch(error => {
-                console.error("Service Worker registration failed:", error);
-            });
-    });
+
+// ======================================================
+// SERVICE WORKER
+// ======================================================
+
+if (
+    "serviceWorker" in navigator
+) {
+
+    window.addEventListener(
+
+        "load",
+
+        async () => {
+
+            try {
+
+                const registration =
+                    await navigator.serviceWorker
+                        .register(
+                            "./sw.js"
+                        );
+
+
+                console.log(
+                    "Service Worker registered successfully."
+                );
+
+
+                /*
+                 * Check for a newer Service Worker
+                 * every time the application loads.
+                 *
+                 * This helps prevent the app from
+                 * staying on an old cached version.
+                 */
+
+                try {
+
+                    await registration.update();
+
+                    console.log(
+                        "Service Worker update check completed."
+                    );
+
+                } catch (updateError) {
+
+                    console.warn(
+
+                        "Service Worker update check failed:",
+
+                        updateError
+
+                    );
+                }
+
+            } catch (error) {
+
+                console.error(
+
+                    "Service Worker registration failed:",
+
+                    error
+
+                );
+            }
+        }
+    );
 }
+```
