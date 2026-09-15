@@ -694,26 +694,19 @@ function aggregateMonthlyData(
                         item.name.trim();
 
 
-                    const itemOutQty =
-                        Math.max(
-                            0,
-                            Number(
-                                item.outQty
-                            ) || 0
-                        );
+                    /*
+                     * IMPORTANT:
+                     *
+                     * Calculate this row using the
+                     * price values from THIS specific day.
+                     *
+                     * This prevents incorrect monthly
+                     * totals when product prices change
+                     * during the month.
+                     */
 
-
-                    const itemReturnQty =
-                        Math.min(
-                            itemOutQty,
-
-                            Math.max(
-                                0,
-                                Number(
-                                    item.returnQty
-                                ) || 0
-                            )
-                        );
+                    const dailyResult =
+                        calculateRow(item);
 
 
                     const existingIndex =
@@ -741,26 +734,33 @@ function aggregateMonthlyData(
                                 cleanName,
 
                             outQty:
-                                itemOutQty,
+                                dailyResult.outQty,
 
                             returnQty:
-                                itemReturnQty,
+                                dailyResult.returnQty,
 
                             basePrice:
-                                Math.max(
-                                    0,
-                                    Number(
-                                        item.basePrice
-                                    ) || 0
-                                ),
+                                dailyResult.basePrice,
 
                             sellPrice:
-                                Math.max(
-                                    0,
-                                    Number(
-                                        item.sellPrice
-                                    ) || 0
-                                )
+                                dailyResult.sellPrice,
+
+                            soldQty:
+                                dailyResult.soldQty,
+
+                            totalSales:
+                                dailyResult.totalSales,
+
+                            profit:
+                                dailyResult.profit,
+
+                            /*
+                             * This marker tells calculateRow()
+                             * that this row already contains
+                             * aggregated monthly totals.
+                             */
+                            isMonthlyAggregate:
+                                true
                         });
 
                     } else {
@@ -774,49 +774,40 @@ function aggregateMonthlyData(
 
 
                         existing.outQty +=
-                            itemOutQty;
+                            dailyResult.outQty;
 
 
                         existing.returnQty +=
-                            itemReturnQty;
+                            dailyResult.returnQty;
 
 
-                        if (
-                            Number.isFinite(
-                                Number(
-                                    item.basePrice
-                                )
-                            )
-                        ) {
-
-                            existing.basePrice =
-                                Math.max(
-                                    0,
-                                    Number(
-                                        item.basePrice
-                                    )
-                                );
-                        }
+                        existing.soldQty +=
+                            dailyResult.soldQty;
 
 
-                        if (
-                            Number.isFinite(
-                                Number(
-                                    item.sellPrice
-                                )
-                            )
-                        ) {
+                        existing.totalSales +=
+                            dailyResult.totalSales;
 
-                            existing.sellPrice =
-                                Math.max(
-                                    0,
-                                    Number(
-                                        item.sellPrice
-                                    )
-                                );
-                        }
+
+                        existing.profit +=
+                            dailyResult.profit;
+
+
+                        /*
+                         * Keep the latest day's prices
+                         * for display, preserving the
+                         * previous UI behavior.
+                         *
+                         * These prices are NOT used to
+                         * recalculate monthly totals.
+                         */
+                        existing.basePrice =
+                            dailyResult.basePrice;
+
+
+                        existing.sellPrice =
+                            dailyResult.sellPrice;
                     }
-
                 });
 
             }
@@ -824,9 +815,14 @@ function aggregateMonthlyData(
     }
 
 
-    return normalizeStore(
-        aggregated
-    );
+    /*
+     * Do NOT call normalizeStore() here.
+     *
+     * normalizeStore() intentionally keeps only
+     * the normal daily-report fields and would remove
+     * the monthly aggregate totals.
+     */
+    return aggregated;
 }
 
 
@@ -835,6 +831,163 @@ function aggregateMonthlyData(
 // ======================================================
 
 function calculateRow(row) {
+
+    /*
+     * MONTHLY AGGREGATE
+     *
+     * Monthly rows already contain the correctly
+     * calculated totals from each individual day.
+     *
+     * Therefore we must NOT calculate:
+     *
+     *   totalSales = monthlySoldQty × latestSellPrice
+     *
+     * or:
+     *
+     *   profit = monthlySoldQty ×
+     *            (latestSellPrice - latestBasePrice)
+     *
+     * because prices may have changed during the month.
+     */
+
+    if (
+        row?.isMonthlyAggregate === true
+    ) {
+
+        const rawOutQty =
+            Number(row?.outQty);
+
+
+        const outQty =
+            Number.isFinite(
+                rawOutQty
+            )
+                ? Math.max(
+                    0,
+                    rawOutQty
+                )
+                : 0;
+
+
+        const rawReturnQty =
+            Number(row?.returnQty);
+
+
+        const returnQty =
+            Math.min(
+
+                outQty,
+
+                Number.isFinite(
+                    rawReturnQty
+                )
+                    ? Math.max(
+                        0,
+                        rawReturnQty
+                    )
+                    : 0
+            );
+
+
+        const rawBasePrice =
+            Number(row?.basePrice);
+
+
+        const basePrice =
+            Number.isFinite(
+                rawBasePrice
+            )
+                ? Math.max(
+                    0,
+                    rawBasePrice
+                )
+                : 0;
+
+
+        const rawSellPrice =
+            Number(row?.sellPrice);
+
+
+        const sellPrice =
+            Number.isFinite(
+                rawSellPrice
+            )
+                ? Math.max(
+                    0,
+                    rawSellPrice
+                )
+                : 0;
+
+
+        const rawSoldQty =
+            Number(row?.soldQty);
+
+
+        const soldQty =
+            Number.isFinite(
+                rawSoldQty
+            )
+                ? Math.max(
+                    0,
+                    rawSoldQty
+                )
+                : Math.max(
+                    0,
+                    outQty - returnQty
+                );
+
+
+        const rawTotalSales =
+            Number(row?.totalSales);
+
+
+        const totalSales =
+            Number.isFinite(
+                rawTotalSales
+            )
+                ? Math.max(
+                    0,
+                    rawTotalSales
+                )
+                : 0;
+
+
+        const rawProfit =
+            Number(row?.profit);
+
+
+        const profit =
+            Number.isFinite(
+                rawProfit
+            )
+                ? rawProfit
+                : 0;
+
+
+        return {
+
+            outQty,
+
+            returnQty,
+
+            basePrice,
+
+            sellPrice,
+
+            soldQty,
+
+            totalSales,
+
+            profit
+        };
+    }
+
+
+    /*
+     * DAILY CALCULATION
+     *
+     * Existing Daily Report logic remains unchanged.
+     */
 
     const rawOutQty =
         Number(row?.outQty);
