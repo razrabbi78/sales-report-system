@@ -1,4 +1,3 @@
-```javascript
 const CATEGORIES = [
     "Fresh",
     "RFL",
@@ -3547,4 +3546,3 @@ if (
         }
     );
 }
-```
