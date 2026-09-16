@@ -10,6 +10,8 @@ const CATEGORIES = [
 
 const MAX_HISTORY = 20;
 
+const PRODUCT_STORAGE_KEY = "sales_report_products";
+
 
 const AppState = {
     currentCategory: "Fresh",
@@ -31,6 +33,11 @@ function initApp() {
     setTodayDate();
     loadTheme();
     renderCategoryDropdown();
+
+    // Migrate/link existing daily report products
+    // before loading the current report.
+    migrateProductsFromReports();
+
     loadReportData();
     bindGlobalEvents();
     bindModalHelpers();
@@ -93,6 +100,666 @@ function setTodayDate() {
 function getStorageKey(dateStr) {
 
     return `sales_report_${dateStr}`;
+}
+
+
+// ======================================================
+// PRODUCT DATABASE
+// ======================================================
+
+function getProducts() {
+
+    try {
+
+        const savedProducts =
+            localStorage.getItem(
+                PRODUCT_STORAGE_KEY
+            );
+
+
+        if (!savedProducts) {
+            return [];
+        }
+
+
+        const products =
+            JSON.parse(
+                savedProducts
+            );
+
+
+        return Array.isArray(products)
+            ? products
+            : [];
+
+    } catch (error) {
+
+        console.error(
+            "Could not load product database:",
+            error
+        );
+
+
+        return [];
+    }
+}
+
+
+function saveProducts(products) {
+
+    try {
+
+        localStorage.setItem(
+
+            PRODUCT_STORAGE_KEY,
+
+            JSON.stringify(
+                Array.isArray(products)
+                    ? products
+                    : []
+            )
+
+        );
+
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "Could not save product database:",
+            error
+        );
+
+
+        return false;
+    }
+}
+
+
+function createProductId() {
+
+    return (
+        `prod_${Date.now()}_` +
+        Math.random()
+            .toString(36)
+            .slice(2, 8)
+    );
+}
+
+
+function findProductInDatabase(
+    name,
+    category
+) {
+
+    const cleanName =
+        String(
+            name ?? ""
+        ).trim();
+
+
+    const cleanCategory =
+        String(
+            category ?? ""
+        ).trim();
+
+
+    if (
+        !cleanName ||
+        !cleanCategory
+    ) {
+        return null;
+    }
+
+
+    return getProducts().find(
+
+        product =>
+
+            String(
+                product?.name ?? ""
+            )
+                .trim()
+                .toLowerCase() ===
+            cleanName.toLowerCase() &&
+
+            product?.category ===
+            cleanCategory
+
+    ) || null;
+}
+
+
+function addProductToDatabase({
+    name,
+    category,
+    basePrice = 0,
+    sellPrice = 0
+} = {}) {
+
+    const cleanName =
+        String(
+            name ?? ""
+        ).trim();
+
+
+    const cleanCategory =
+        String(
+            category ?? ""
+        ).trim();
+
+
+    if (
+        !cleanName ||
+        !cleanCategory
+    ) {
+        return null;
+    }
+
+
+    const products =
+        getProducts();
+
+
+    const existingProduct =
+        findProductInDatabase(
+            cleanName,
+            cleanCategory
+        );
+
+
+    if (existingProduct) {
+
+        return existingProduct;
+    }
+
+
+    const newProduct = {
+
+        id:
+            createProductId(),
+
+        name:
+            cleanName,
+
+        category:
+            cleanCategory,
+
+        basePrice:
+            Math.max(
+                0,
+                Number(
+                    basePrice
+                ) || 0
+            ),
+
+        sellPrice:
+            Math.max(
+                0,
+                Number(
+                    sellPrice
+                ) || 0
+            ),
+
+        active:
+            true
+    };
+
+
+    products.push(
+        newProduct
+    );
+
+
+    return saveProducts(
+        products
+    )
+        ? newProduct
+        : null;
+}
+
+
+/**
+ * Scan existing daily reports and safely build/update the
+ * Product Database without changing any historical report data.
+ *
+ * Important:
+ * - Only sales_report_YYYY-MM-DD keys are inspected.
+ * - Existing product IDs are preserved when available.
+ * - The latest available report price is used only when the
+ *   master product price is missing/zero.
+ * - Daily report rows are never rewritten here.
+ */
+function migrateProductsFromReports() {
+
+    const products =
+        getProducts();
+
+    let productsChanged =
+        false;
+
+    const reportKeys = [];
+
+    for (
+        let i = 0;
+        i < localStorage.length;
+        i++
+    ) {
+
+        const storageKey =
+            localStorage.key(i);
+
+        if (
+            !storageKey ||
+            !storageKey.startsWith(
+                "sales_report_"
+            )
+        ) {
+            continue;
+        }
+
+        const date =
+            storageKey.replace(
+                "sales_report_",
+                ""
+            );
+
+        if (
+            !/^\d{4}-\d{2}-\d{2}$/.test(
+                date
+            )
+        ) {
+            continue;
+        }
+
+        const parsedDate =
+            new Date(
+                `${date}T00:00:00`
+            );
+
+        if (
+            Number.isNaN(
+                parsedDate.getTime()
+            )
+        ) {
+            continue;
+        }
+
+        reportKeys.push({
+            storageKey,
+            date
+        });
+    }
+
+    // Newest reports first so that, when a product has
+    // no master price yet, its latest known price wins.
+    reportKeys.sort(
+        (a, b) =>
+            b.date.localeCompare(a.date)
+    );
+
+    reportKeys.forEach(
+        ({ storageKey }) => {
+
+            let dailyData;
+
+            try {
+
+                const saved =
+                    localStorage.getItem(
+                        storageKey
+                    );
+
+                if (!saved) {
+                    return;
+                }
+
+                dailyData =
+                    JSON.parse(saved);
+
+            } catch (error) {
+
+                console.warn(
+                    `Could not migrate product data from ${storageKey}:`,
+                    error
+                );
+
+                return;
+            }
+
+            CATEGORIES.forEach(
+                category => {
+
+                    const rows =
+                        dailyData?.[category];
+
+                    if (
+                        !Array.isArray(rows)
+                    ) {
+                        return;
+                    }
+
+                    rows.forEach(
+                        row => {
+
+                            const cleanName =
+                                String(
+                                    row?.name ?? ""
+                                ).trim();
+
+                            if (!cleanName) {
+                                return;
+                            }
+
+                            let product =
+                                row?.productId
+                                    ? products.find(
+                                        item =>
+                                            item?.id ===
+                                            row.productId
+                                    )
+                                    : null;
+
+                            if (!product) {
+
+                                product =
+                                    products.find(
+                                        item =>
+                                            String(
+                                                item?.name ?? ""
+                                            )
+                                                .trim()
+                                                .toLowerCase() ===
+                                            cleanName.toLowerCase() &&
+                                            item?.category ===
+                                            category
+                                    ) || null;
+                            }
+
+                            if (!product) {
+
+                                product = {
+                                    id:
+                                        typeof row?.productId ===
+                                            "string" &&
+                                        row.productId.trim()
+                                            ? row.productId
+                                            : createProductId(),
+
+                                    name:
+                                        cleanName,
+
+                                    category:
+                                        category,
+
+                                    basePrice:
+                                        Math.max(
+                                            0,
+                                            Number(
+                                                row?.basePrice
+                                            ) || 0
+                                        ),
+
+                                    sellPrice:
+                                        Math.max(
+                                            0,
+                                            Number(
+                                                row?.sellPrice
+                                            ) || 0
+                                        ),
+
+                                    active:
+                                        true
+                                };
+
+                                products.push(
+                                    product
+                                );
+
+                                productsChanged =
+                                    true;
+
+                                return;
+                            }
+
+                            // Preserve the master product's existing
+                            // non-zero prices. Only fill missing prices
+                            // from historical report data.
+                            if (
+                                Number(product.basePrice) <= 0 &&
+                                Number(row?.basePrice) > 0
+                            ) {
+
+                                product.basePrice =
+                                    Math.max(
+                                        0,
+                                        Number(
+                                            row.basePrice
+                                        ) || 0
+                                    );
+
+                                productsChanged =
+                                    true;
+                            }
+
+                            if (
+                                Number(product.sellPrice) <= 0 &&
+                                Number(row?.sellPrice) > 0
+                            ) {
+
+                                product.sellPrice =
+                                    Math.max(
+                                        0,
+                                        Number(
+                                            row.sellPrice
+                                        ) || 0
+                                    );
+
+                                productsChanged =
+                                    true;
+                            }
+
+                            if (
+                                product.name !==
+                                cleanName
+                            ) {
+
+                                product.name =
+                                    cleanName;
+
+                                productsChanged =
+                                    true;
+                            }
+
+                            if (
+                                product.category !==
+                                category
+                            ) {
+
+                                product.category =
+                                    category;
+
+                                productsChanged =
+                                    true;
+                            }
+
+                            if (
+                                product.active !==
+                                true &&
+                                typeof product.active !==
+                                    "boolean"
+                            ) {
+
+                                product.active =
+                                    true;
+
+                                productsChanged =
+                                    true;
+                            }
+                        }
+                    );
+                }
+            );
+        }
+    );
+
+    if (productsChanged) {
+
+        saveProducts(
+            products
+        );
+    }
+}
+
+
+function syncStoreWithProductDatabase() {
+
+    if (
+        AppState.reportView !==
+        "daily"
+    ) {
+        return;
+    }
+
+
+    const products =
+        getProducts();
+
+
+    let productsChanged =
+        false;
+
+
+    CATEGORIES.forEach(
+        category => {
+
+            const rows =
+                Array.isArray(
+                    AppState.store?.[
+                    category
+                    ]
+                )
+                    ? AppState.store[
+                    category
+                    ]
+                    : [];
+
+
+            rows.forEach(
+                row => {
+
+                    const cleanName =
+                        String(
+                            row?.name ?? ""
+                        ).trim();
+
+
+                    if (!cleanName) {
+                        return;
+                    }
+
+
+                    let product =
+                        row.productId
+
+                            ? products.find(
+                                item =>
+                                    item?.id ===
+                                    row.productId
+                            )
+
+                            : null;
+
+
+                    if (!product) {
+
+                        product =
+                            products.find(
+
+                                item =>
+
+                                    String(
+                                        item?.name ?? ""
+                                    )
+                                        .trim()
+                                        .toLowerCase() ===
+                                    cleanName.toLowerCase() &&
+
+                                    item?.category ===
+                                    category
+
+                            ) || null;
+                    }
+
+
+                    if (!product) {
+
+                        product = {
+
+                            id:
+                                createProductId(),
+
+                            name:
+                                cleanName,
+
+                            category,
+
+                            basePrice:
+                                Math.max(
+                                    0,
+                                    Number(
+                                        row.basePrice
+                                    ) || 0
+                                ),
+
+                            sellPrice:
+                                Math.max(
+                                    0,
+                                    Number(
+                                        row.sellPrice
+                                    ) || 0
+                                ),
+
+                            active:
+                                true
+                        };
+
+
+                        products.push(
+                            product
+                        );
+
+
+                        productsChanged =
+                            true;
+                    }
+
+
+                    if (
+                        row.productId !==
+                        product.id
+                    ) {
+
+                        row.productId =
+                            product.id;
+
+
+                        productsChanged =
+                            true;
+                    }
+                }
+            );
+        }
+    );
+
+
+    if (productsChanged) {
+
+        saveProducts(
+            products
+        );
+    }
 }
 
 
@@ -367,6 +1034,12 @@ function loadReportData() {
                 date
             );
 
+
+        syncStoreWithProductDatabase();
+
+
+        saveCurrentState();
+
     } else {
 
         /*
@@ -378,14 +1051,10 @@ function loadReportData() {
          * Monthly Summary.
          */
 
-        const monthlyStore =
+        AppState.store =
             aggregateMonthlyData(
                 date
             );
-
-
-        AppState.store =
-            monthlyStore;
     }
 
 
@@ -395,9 +1064,6 @@ function loadReportData() {
      * 1. Build correct store
      * 2. Render table
      * 3. Calculate metrics from SAME store
-     *
-     * This guarantees that Monthly Summary
-     * metrics and table use the same data.
      */
 
     renderTableRows();
@@ -454,7 +1120,7 @@ function getOrInitializeCategoryData(
 
     const currentCategoryData =
         storedData?.[
-            AppState.currentCategory
+        AppState.currentCategory
         ];
 
 
@@ -493,22 +1159,53 @@ function getOrInitializeCategoryData(
 
 
         if (
-            storageKey &&
-            storageKey.startsWith(
+            !storageKey ||
+            !storageKey.startsWith(
                 "sales_report_"
-            ) &&
-            storageKey !== key
+            ) ||
+            storageKey === key
         ) {
-
-            previousDates.push(
-
-                storageKey.replace(
-                    "sales_report_",
-                    ""
-                )
-
-            );
+            continue;
         }
+
+
+        const previousDate =
+            storageKey.replace(
+                "sales_report_",
+                ""
+            );
+
+
+        // Only accept valid YYYY-MM-DD
+        // report dates.
+
+        if (
+            !/^\d{4}-\d{2}-\d{2}$/.test(
+                previousDate
+            )
+        ) {
+            continue;
+        }
+
+
+        const parsedDate =
+            new Date(
+                `${previousDate}T00:00:00`
+            );
+
+
+        if (
+            Number.isNaN(
+                parsedDate.getTime()
+            )
+        ) {
+            continue;
+        }
+
+
+        previousDates.push(
+            previousDate
+        );
     }
 
 
@@ -522,21 +1219,32 @@ function getOrInitializeCategoryData(
 
         try {
 
+            const previousStorageKey =
+                getStorageKey(
+                    previousDate
+                );
+
+
+            const previousSaved =
+                localStorage.getItem(
+                    previousStorageKey
+                );
+
+
+            if (!previousSaved) {
+                continue;
+            }
+
+
             const previousData =
                 JSON.parse(
-
-                    localStorage.getItem(
-                        getStorageKey(
-                            previousDate
-                        )
-                    )
-
+                    previousSaved
                 );
 
 
             const categoryData =
                 previousData?.[
-                    AppState.currentCategory
+                AppState.currentCategory
                 ];
 
 
@@ -565,6 +1273,12 @@ function getOrInitializeCategoryData(
                         .map(
                             item => ({
 
+                                productId:
+                                    typeof item?.productId ===
+                                        "string"
+                                        ? item.productId
+                                        : "",
+
                                 name:
                                     item.name.trim(),
 
@@ -574,24 +1288,18 @@ function getOrInitializeCategoryData(
 
                                 basePrice:
                                     Math.max(
-
                                         0,
-
                                         Number(
                                             item.basePrice
                                         ) || 0
-
                                     ),
 
                                 sellPrice:
                                     Math.max(
-
                                         0,
-
                                         Number(
                                             item.sellPrice
                                         ) || 0
-
                                     )
                             })
                         );
@@ -707,9 +1415,15 @@ function normalizeStore(store) {
 
                         return {
 
+                            productId:
+                                typeof row?.productId ===
+                                    "string"
+                                    ? row.productId
+                                    : "",
+
                             name:
                                 typeof row?.name ===
-                                "string"
+                                    "string"
 
                                     ? row.name
 
@@ -875,24 +1589,8 @@ function aggregateMonthlyData(
 
 
                         /*
-                         * VERY IMPORTANT
-                         *
                          * Calculate each day's row
                          * using THAT DAY'S prices.
-                         *
-                         * Example:
-                         *
-                         * Day 1:
-                         * 10 × ৳100 = ৳1000
-                         *
-                         * Day 2:
-                         * 10 × ৳110 = ৳1100
-                         *
-                         * Monthly:
-                         * ৳1000 + ৳1100 = ৳2100
-                         *
-                         * NOT:
-                         * 20 × ৳110 = ৳2200
                          */
 
                         const dailyResult =
@@ -924,6 +1622,12 @@ function aggregateMonthlyData(
                             aggregated[
                                 category
                             ].push({
+
+                                productId:
+                                    typeof item?.productId ===
+                                        "string"
+                                        ? item.productId
+                                        : "",
 
                                 name:
                                     cleanName,
@@ -957,9 +1661,9 @@ function aggregateMonthlyData(
 
                             const existing =
                                 aggregated[
-                                    category
+                                category
                                 ][
-                                    existingIndex
+                                existingIndex
                                 ];
 
 
@@ -1014,8 +1718,6 @@ function aggregateMonthlyData(
      * totalSales
      * profit
      * isMonthlyAggregate
-     *
-     * which are required for the monthly report.
      */
 
     return aggregated;
@@ -1041,15 +1743,26 @@ function calculateRow(row) {
         row?.isMonthlyAggregate === true
     ) {
 
+        const rawOutQty =
+            Number(
+                row?.outQty
+            );
+
+
         const outQty =
-            Math.max(
+            Number.isFinite(
+                rawOutQty
+            )
+                ? Math.max(
+                    0,
+                    rawOutQty
+                )
+                : 0;
 
-                0,
 
-                Number(
-                    row.outQty
-                ) || 0
-
+        const rawReturnQty =
+            Number(
+                row?.returnQty
             );
 
 
@@ -1058,15 +1771,14 @@ function calculateRow(row) {
 
                 outQty,
 
-                Math.max(
-
-                    0,
-
-                    Number(
-                        row.returnQty
-                    ) || 0
-
+                Number.isFinite(
+                    rawReturnQty
                 )
+                    ? Math.max(
+                        0,
+                        rawReturnQty
+                    )
+                    : 0
 
             );
 
@@ -1077,7 +1789,7 @@ function calculateRow(row) {
                 0,
 
                 Number(
-                    row.basePrice
+                    row?.basePrice
                 ) || 0
 
             );
@@ -1089,7 +1801,7 @@ function calculateRow(row) {
                 0,
 
                 Number(
-                    row.sellPrice
+                    row?.sellPrice
                 ) || 0
 
             );
@@ -1097,7 +1809,7 @@ function calculateRow(row) {
 
         const storedSoldQty =
             Number(
-                row.soldQty
+                row?.soldQty
             );
 
 
@@ -1111,13 +1823,14 @@ function calculateRow(row) {
                 )
                 : Math.max(
                     0,
-                    outQty - returnQty
+                    outQty -
+                    returnQty
                 );
 
 
         const storedTotalSales =
             Number(
-                row.totalSales
+                row?.totalSales
             );
 
 
@@ -1134,7 +1847,7 @@ function calculateRow(row) {
 
         const storedProfit =
             Number(
-                row.profit
+                row?.profit
             );
 
 
@@ -1167,8 +1880,6 @@ function calculateRow(row) {
 
     /*
      * DAILY REPORT CALCULATION
-     *
-     * Existing logic remains unchanged.
      */
 
     const rawOutQty =
@@ -1400,7 +2111,7 @@ function renderTableRows() {
 
     const rows =
         AppState.store[
-            AppState.currentCategory
+        AppState.currentCategory
         ] || [];
 
 
@@ -1419,6 +2130,8 @@ function renderTableRows() {
         ) {
 
             rows.push({
+
+                productId: "",
 
                 name: "",
 
@@ -1500,44 +2213,44 @@ function renderTableRows() {
 
                     <td>
                         ${formatNumber(
-                            result.outQty
-                        )}
+                    result.outQty
+                )}
                     </td>
 
                     <td>
                         ${formatNumber(
-                            result.returnQty
-                        )}
+                    result.returnQty
+                )}
                     </td>
 
                     <td class="calculated-cell">
                         ${formatNumber(
-                            result.soldQty
-                        )}
+                    result.soldQty
+                )}
                     </td>
 
                     <td>
                         ${formatCurrency(
-                            result.basePrice
-                        )}
+                    result.basePrice
+                )}
                     </td>
 
                     <td>
                         ${formatCurrency(
-                            result.sellPrice
-                        )}
+                    result.sellPrice
+                )}
                     </td>
 
                     <td class="calculated-cell">
                         ${formatCurrency(
-                            result.totalSales
-                        )}
+                    result.totalSales
+                )}
                     </td>
 
                     <td class="calculated-cell profit-cell">
                         ${formatCurrency(
-                            result.profit
-                        )}
+                    result.profit
+                )}
                     </td>
 
                 `;
@@ -1552,8 +2265,8 @@ function renderTableRows() {
                             type="text"
                             class="product-name-input"
                             value="${escapeHTML(
-                                row.name
-                            )}"
+                    row.name
+                )}"
                             placeholder="Product name"
                             data-index="${index}"
                             data-field="name"
@@ -1592,8 +2305,8 @@ function renderTableRows() {
 
                     <td class="calculated-cell">
                         ${formatNumber(
-                            result.soldQty
-                        )}
+                    result.soldQty
+                )}
                     </td>
 
 
@@ -1627,15 +2340,15 @@ function renderTableRows() {
 
                     <td class="calculated-cell">
                         ${formatCurrency(
-                            result.totalSales
-                        )}
+                    result.totalSales
+                )}
                     </td>
 
 
                     <td class="calculated-cell profit-cell">
                         ${formatCurrency(
-                            result.profit
-                        )}
+                    result.profit
+                )}
                     </td>
 
 
@@ -1786,7 +2499,7 @@ function onInputChange(event) {
 
     const rows =
         AppState.store[
-            AppState.currentCategory
+        AppState.currentCategory
         ] || [];
 
 
@@ -1830,6 +2543,43 @@ function onInputChange(event) {
 
         row.name =
             input.value;
+
+
+        const cleanName =
+            row.name.trim();
+
+
+        if (cleanName) {
+
+            const product =
+                addProductToDatabase({
+
+                    name:
+                        cleanName,
+
+                    category:
+                        AppState.currentCategory,
+
+                    basePrice:
+                        row.basePrice,
+
+                    sellPrice:
+                        row.sellPrice
+
+                });
+
+
+            if (product) {
+
+                row.productId =
+                    product.id;
+            }
+
+        } else {
+
+            row.productId =
+                "";
+        }
 
     } else {
 
@@ -1909,6 +2659,43 @@ function onInputChange(event) {
                 )
 
             );
+    }
+
+
+    /*
+     * If a row already has a name but does not
+     * have a Product Database ID, create/reuse
+     * its master product.
+     */
+
+    if (
+        row.name.trim() &&
+        !row.productId
+    ) {
+
+        const product =
+            addProductToDatabase({
+
+                name:
+                    row.name,
+
+                category:
+                    AppState.currentCategory,
+
+                basePrice:
+                    row.basePrice,
+
+                sellPrice:
+                    row.sellPrice
+
+            });
+
+
+        if (product) {
+
+            row.productId =
+                product.id;
+        }
     }
 
 
@@ -2023,11 +2810,13 @@ function addRow() {
 
     const rows =
         AppState.store[
-            AppState.currentCategory
+        AppState.currentCategory
         ] || [];
 
 
     rows.push({
+
+        productId: "",
 
         name: "",
 
@@ -2077,7 +2866,7 @@ function openDeleteModal(index) {
 
     const row =
         AppState.store[
-            AppState.currentCategory
+        AppState.currentCategory
         ]?.[index];
 
 
@@ -2158,7 +2947,7 @@ function confirmDelete() {
 
     const rows =
         AppState.store[
-            AppState.currentCategory
+        AppState.currentCategory
         ] || [];
 
 
@@ -2295,7 +3084,7 @@ function calculateMetrics() {
 
     const rows =
         AppState.store[
-            AppState.currentCategory
+        AppState.currentCategory
         ] || [];
 
 
@@ -2522,8 +3311,8 @@ function createPrintMeta() {
         <div class="print-report-title">
 
             ${escapeHTML(
-                getReportTitle()
-            )}
+        getReportTitle()
+    )}
 
         </div>
 
@@ -2537,8 +3326,8 @@ function createPrintMeta() {
                 </strong>
 
                 ${escapeHTML(
-                    AppState.currentCategory
-                )}
+        AppState.currentCategory
+    )}
 
             </span>
 
@@ -2550,8 +3339,8 @@ function createPrintMeta() {
                 </strong>
 
                 ${escapeHTML(
-                    getFormattedReportDate()
-                )}
+        getFormattedReportDate()
+    )}
 
             </span>
 
@@ -2833,8 +3622,8 @@ function buildPDFDocument() {
             <div class="pdf-report-title">
 
                 ${escapeHTML(
-                    getReportTitle()
-                )}
+        getReportTitle()
+    )}
 
             </div>
 
@@ -2857,8 +3646,8 @@ function buildPDFDocument() {
                 </strong>
 
                 ${escapeHTML(
-                    AppState.currentCategory
-                )}
+        AppState.currentCategory
+    )}
 
             </div>
 
@@ -2870,8 +3659,8 @@ function buildPDFDocument() {
                 </strong>
 
                 ${escapeHTML(
-                    getFormattedReportDate()
-                )}
+        getFormattedReportDate()
+    )}
 
             </div>
 
